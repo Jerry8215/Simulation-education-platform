@@ -1,0 +1,65 @@
+@import "tailwindcss";
+
+/**
+ * Paleta SORA.
+ *
+ * Los valores se muestrearon de las pantallas del diseño en Canva, no se
+ * eligieron a ojo: #003760 ocupa el 80% de la barra lateral y #e9f0f7 el 33%
+ * del lienzo. Si alguna vez el cliente reexporta el diseño, se vuelve a correr
+ * el muestreo en vez de ajustar tonos a mano.
+ *
+ * El diseño no tiene modo oscuro. No lo inventamos: la plataforma se ve igual
+ * a cualquier hora, como en el Canva del cliente.
+ */
+@theme {
+  /* Azul marino de la barra lateral, y color de todo el texto de titular. */
+  --color-navy-950: #00253f;
+  --color-navy-900: #003760;
+  --color-navy-800: #0a517e;
+  --color-navy-700: #0f4269;
+
+  /* Azul de acento: botones primarios, ítem activo del menú, enlaces. */
+  --color-brand-600: #1f7bcc;
+  --color-brand-500: #4b9ad3;
+  --color-brand-200: #d0e7f4;
+  --color-brand-100: #e3edfd;
+
+  /* Superficies. */
+  --color-canvas: #e9f0f7;
+  --color-card: #fbfeff;
+
+  /* Texto secundario sobre fondo oscuro y sobre fondo claro. */
+  --color-muted-400: #7c99b1;
+  --color-muted-600: #5b7386;
+
+  /* Estados de las notas cualitativas (§3 del modelo de calificación). */
+  --color-success: #2f9e6f;
+  --color-warning: #d98324;
+  --color-danger: #cf4444;
+
+  --font-sans: var(--font-poppins), ui-sans-serif, system-ui, sans-serif;
+
+  /* Los puntajes van en Montserrat, como en el reporte oficial del ICFES.
+     Se usa con la clase `font-score`. */
+  --font-score: var(--font-montserrat), var(--font-poppins), sans-serif;
+
+  /* Las tarjetas del diseño tienen esquinas muy redondeadas. */
+  --radius-card: 1rem;
+}
+
+/* Los puntajes, en Montserrat como el reporte oficial del ICFES. */
+.font-score {
+  font-family: var(--font-score);
+  font-variant-numeric: tabular-nums;
+}
+
+body {
+  background: var(--color-canvas);
+  color: var(--color-navy-900);
+}
+
+/* El estudiante navega el simulacro con el teclado; el foco debe verse. */
+:focus-visible {
+  outline: 2px solid var(--color-brand-600);
+  outline-offset: 2px;
+}

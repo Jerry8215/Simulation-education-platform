@@ -1,0 +1,360 @@
+// SORA PREICFES — esquema de datos
+//
+// Dos decisiones estructurales que conviene entender antes de leer el resto:
+//
+// 1. La respuesta correcta vive en QuestionVersion y NUNCA sale del servidor.
+//    Ninguna consulta que alimente al navegador debe seleccionar `correctOption`.
+//
+// 2. Las preguntas se versionan. Un AttemptAnswer apunta a la QuestionVersion con la
+//    que el estudiante respondió, no a la Question. Corregir una errata hoy no altera
+//    el puntaje que alguien recibió la semana pasada.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Role {
+  STUDENT
+  ADMIN
+}
+
+enum Area {
+  LECTURA_CRITICA
+  MATEMATICAS
+  SOCIALES_CIUDADANAS
+  CIENCIAS_NATURALES
+  INGLES
+}
+
+enum AssessmentType {
+  SIMULACRO
+  TALLER
+}
+
+enum AttemptStatus {
+  IN_PROGRESS
+  SUBMITTED
+  EXPIRED
+}
+
+enum Option {
+  A
+  B
+  C
+  D
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  username     String   @unique
+  passwordHash String
+  fullName     String
+  role         Role     @default(STUDENT)
+  avatarKey    String   @default("miauricio")
+  /// Falso hasta que el estudiante elige personaje la primera vez que entra.
+  avatarChosen Boolean  @default(false)
+  /// Cuando el administrador suspende a un estudiante (por mal uso), no puede
+  /// iniciar sesión y sus sesiones abiertas dejan de servir. Es reversible.
+  suspended    Boolean  @default(false)
+  // §6 del modelo de calificación: la meta la fija el estudiante, por defecto 400.
+  targetScore  Int      @default(400)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  /// El grupo/cohorte al que pertenece (ej. "Mes A - 2026"). Define a qué
+  /// simulacros tiene acceso. Nulo = sin grupo (ve solo los simulacros sin
+  /// restricción de grupo).
+  groupId String?
+  group   Group?  @relation(fields: [groupId], references: [id], onDelete: SetNull)
+
+  attempts       Attempt[]
+  passwordResets PasswordReset[]
+  accessCode     AccessCode?
+
+  @@index([role])
+  @@index([groupId])
+}
+
+/// Un grupo o cohorte de estudiantes (por ejemplo, los del mes intensivo de
+/// febrero). Sirve para controlar qué simulacros ve cada quién: un simulacro se
+/// asigna a uno o varios grupos, y el estudiante solo ve los de su grupo.
+model Group {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  createdAt DateTime @default(now())
+
+  students    User[]
+  assessments AssessmentGroup[]
+}
+
+/// Relación muchos-a-muchos: qué grupos tienen acceso a qué simulacro. Si un
+/// simulacro NO tiene ninguna fila aquí, no está restringido y lo ven todos
+/// (compatibilidad con lo que ya estaba publicado).
+model AssessmentGroup {
+  assessmentId String
+  assessment   Assessment @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+  groupId      String
+  group        Group      @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  @@id([assessmentId, groupId])
+  @@index([groupId])
+}
+
+/// Código de acceso: solo quien pagó el curso recibe uno, y sin uno no hay
+/// registro. Cada código sirve una sola vez.
+model AccessCode {
+  id        String    @id @default(cuid())
+  code      String    @unique
+  /// Para que el administrador sepa a quién se lo entregó (nombre, referencia de pago).
+  note      String?
+  createdAt DateTime  @default(now())
+
+  usedAt   DateTime?
+  usedById String?   @unique
+  usedBy   User?     @relation(fields: [usedById], references: [id], onDelete: SetNull)
+
+  @@index([usedAt])
+}
+
+model PasswordReset {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
+}
+
+model Competency {
+  id        String     @id @default(cuid())
+  area      Area
+  name      String
+  questions Question[]
+
+  @@unique([area, name])
+}
+
+/// Texto o gráfica compartida por varias preguntas (columna `id_contexto` de la plantilla).
+model Context {
+  id        String     @id @default(cuid())
+  externalId String?   @unique // el `id_contexto` que escribió el administrador en el Excel
+  text      String
+  imageUrl  String?
+  questions Question[]
+}
+
+/// Identidad estable de una pregunta. El contenido vive en QuestionVersion.
+model Question {
+  id           String     @id @default(cuid())
+  area         Area
+  competencyId String
+  competency   Competency @relation(fields: [competencyId], references: [id])
+  contextId    String?
+  context      Context?   @relation(fields: [contextId], references: [id])
+
+  currentVersionId String?           @unique
+  currentVersion   QuestionVersion?  @relation("CurrentVersion", fields: [currentVersionId], references: [id])
+  versions         QuestionVersion[] @relation("AllVersions")
+
+  assessmentQuestions AssessmentQuestion[]
+
+  archivedAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([area])
+  @@index([competencyId])
+}
+
+/// El contenido inmutable de una pregunta en un momento dado.
+/// `correctOption` no debe abandonar el servidor jamás.
+model QuestionVersion {
+  id         String   @id @default(cuid())
+  questionId String
+  question   Question @relation("AllVersions", fields: [questionId], references: [id], onDelete: Cascade)
+  version    Int
+
+  stem          String
+  optionA       String
+  optionB       String
+  optionC       String
+  optionD       String
+  /// Cuando una opción es una imagen (tabla, gráfica) en vez de texto. Van
+  /// aparte del texto: una opción puede ser solo imagen, solo texto o ambos.
+  optionAImageUrl String?
+  optionBImageUrl String?
+  optionCImageUrl String?
+  optionDImageUrl String?
+  correctOption Option
+  explanation   String?
+  imageUrl      String?
+
+  createdAt DateTime @default(now())
+
+  currentOf Question?      @relation("CurrentVersion")
+  answers   AttemptAnswer[]
+
+  @@unique([questionId, version])
+}
+
+/// Un simulacro o un taller. Se unifican: mismo motor de calificación.
+model Assessment {
+  id          String         @id @default(cuid())
+  type        AssessmentType
+  title       String
+  description String?
+  /// Solo para simulacros. Los talleres no tienen cronómetro (§8).
+  /// Es la duración de la primera parte (o del simulacro entero si no se divide).
+  durationMinutes Int?
+  /// Si tiene valor, el simulacro se presenta en DOS partes cronometradas (como
+  /// el ICFES real, en dos sesiones): este es el tiempo de la segunda parte.
+  durationMinutesPart2 Int?
+  /// Solo para talleres: el área única que practican.
+  area        Area?
+  published   Boolean        @default(false)
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  /// La imagen de portada, como la cabecera de un formulario de Google.
+  coverUploadId String?
+  coverUpload   Upload? @relation(fields: [coverUploadId], references: [id], onDelete: SetNull)
+
+  questions AssessmentQuestion[]
+  attempts  Attempt[]
+  /// Los grupos que pueden verlo. Vacío = sin restricción (lo ven todos).
+  groups    AssessmentGroup[]
+
+  // El importador arma assessments por su título; upsert necesita esta clave.
+  @@unique([title, type], name: "title_type_key")
+  @@index([type, published])
+}
+
+model AssessmentQuestion {
+  id           String     @id @default(cuid())
+  assessmentId String
+  assessment   Assessment @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+  questionId   String
+  question     Question   @relation(fields: [questionId], references: [id])
+  order        Int
+  /// Columna `peso` de la plantilla. Vacía en el Excel = 1.
+  weight       Int        @default(1)
+  /// La parte (1 o 2) del simulacro a la que pertenece. Columna `parte` del
+  /// Excel; vacía = 1. Solo importa si el simulacro se presenta en dos partes.
+  part         Int        @default(1)
+
+  @@unique([assessmentId, questionId])
+  @@unique([assessmentId, order])
+}
+
+/// Una presentación de un simulacro o taller por parte de un estudiante.
+model Attempt {
+  id           String        @id @default(cuid())
+  userId       String
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  assessmentId String
+  assessment   Assessment    @relation(fields: [assessmentId], references: [id])
+  status       AttemptStatus @default(IN_PROGRESS)
+
+  startedAt   DateTime  @default(now())
+  /// El reloj corre en el servidor (§10). Cerrar la pestaña no lo detiene.
+  /// En un simulacro de dos partes, es la expiración de la parte EN CURSO.
+  expiresAt   DateTime?
+  submittedAt DateTime?
+
+  /// La parte que está presentando (1 o 2). Al terminar la 1 pasa a la 2, con su
+  /// propio cronómetro. La calificación ocurre al final de la última parte.
+  currentPart Int @default(1)
+
+  /// Se llenan al calificar. Nulos mientras el intento está en curso.
+  globalScore  Int? // 0..500, fórmula oficial ICFES (§2). Solo simulacros.
+  percent      Int? // 0..100, porcentaje de aciertos del intento completo (§3).
+  correctCount Int?
+  totalWeight  Int?
+
+  answers    AttemptAnswer[]
+  areaScores AttemptAreaScore[]
+
+  @@index([userId, status])
+  @@index([assessmentId])
+}
+
+model AttemptAnswer {
+  id        String  @id @default(cuid())
+  attemptId String
+  attempt   Attempt @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+
+  /// Apunta a la versión con la que se respondió, no a la pregunta viva.
+  questionVersionId String
+  questionVersion   QuestionVersion @relation(fields: [questionVersionId], references: [id])
+
+  order    Int
+  weight   Int     @default(1)
+  /// Nulo = en blanco. Cuenta como incorrecta, no resta (§1).
+  selected Option?
+
+  /// Se calcula en el servidor al momento de responder; se recalcula al enviar.
+  isCorrect Boolean @default(false)
+
+  /// Milisegundos que el estudiante pasó en esta pregunta. No se muestra todavía (§10).
+  timeSpentMs Int      @default(0)
+  answeredAt  DateTime?
+
+  @@unique([attemptId, questionVersionId])
+  @@index([attemptId])
+}
+
+/// Puntaje por área de un intento. Se guarda calculado para no recalcular en cada lectura.
+model AttemptAreaScore {
+  id        String  @id @default(cuid())
+  attemptId String
+  attempt   Attempt @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  area      Area
+  /// 0..100
+  score     Int
+  obtained  Int
+  possible  Int
+
+  @@unique([attemptId, area])
+}
+
+/// Una imagen subida desde el panel: la portada de un taller, la gráfica de una
+/// pregunta, un mapa.
+///
+/// Se guarda en la base y no en el disco porque en producción (Vercel) el disco
+/// es de solo lectura: un archivo subido desaparecería en el siguiente
+/// despliegue. Además así el cliente sube sus propias imágenes sin depender de
+/// nadie.
+///
+/// Se sirven por /api/imagen/<id>, con caché largo: el contenido de un id nunca
+/// cambia.
+model Upload {
+  id       String @id @default(cuid())
+  /// El nombre con el que se subió. Es lo que el administrador escribe en la
+  /// columna "imagen" del Excel.
+  filename String @unique
+  mimeType String
+  bytes    Int
+  data     Bytes
+
+  createdAt DateTime @default(now())
+
+  coverOf Assessment[]
+}
+
+/// Formulario "¡Te contactamos!" de la landing.
+model ContactLead {
+  id        String   @id @default(cuid())
+  name      String
+  phone     String
+  interest  String
+  createdAt DateTime @default(now())
+  handledAt DateTime?
+}
