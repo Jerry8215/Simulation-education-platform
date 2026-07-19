@@ -15,7 +15,9 @@
 
 import { AREAS, type Area } from '../scoring'
 
-export const OPTIONS = ['A', 'B', 'C', 'D'] as const
+// Hasta 8 opciones: A-D es lo normal, pero el emparejamiento del ICFES de inglés
+// llega a 8 (A-H). Una pregunta usa un rango contiguo desde A (A-D, A-H, o A-B…).
+export const OPTIONS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'] as const
 export type OptionKey = (typeof OPTIONS)[number]
 
 /** Los nombres de área tal como aparecen en la plantilla que usa el cliente. */
@@ -42,11 +44,20 @@ export type RawRow = {
   opcion_b?: string
   opcion_c?: string
   opcion_d?: string
+  /** Opciones extra E-H, para las preguntas de emparejamiento de inglés. */
+  opcion_e?: string
+  opcion_f?: string
+  opcion_g?: string
+  opcion_h?: string
   /** Nombre del archivo de imagen de cada opción, cuando la opción es una tabla/gráfica. */
   imagen_a?: string
   imagen_b?: string
   imagen_c?: string
   imagen_d?: string
+  imagen_e?: string
+  imagen_f?: string
+  imagen_g?: string
+  imagen_h?: string
   respuesta_correcta?: string
   peso?: string | number
   parte?: string | number
@@ -305,33 +316,50 @@ function parseRow(
   if (!stem) block('Falta el enunciado.', 'enunciado')
   else if (stem.length < 10) at('warning', 'El enunciado es muy corto. ¿Quedó cortado por el OCR?', 'enunciado')
 
-  // --- Opciones (texto o imagen) ---
-  // Una opción vale si trae texto O una imagen: en el ICFES hay preguntas cuyas
-  // opciones son tablas o gráficas. Solo se bloquea si la opción queda totalmente
-  // vacía (ni texto ni imagen).
+  // --- Opciones (texto o imagen, de A hasta H) ---
+  // Una opción vale si trae texto O una imagen (hay opciones que son tablas o
+  // gráficas). La pregunta usa un rango CONTIGUO desde A hasta la última opción
+  // presente: 4 (A-D) para lo normal, hasta 8 (A-H) para el emparejamiento de
+  // inglés. Un hueco (p. ej. C vacía con D llena) es un error.
   const options = {} as Record<OptionKey, string>
   const optionImages = {} as Record<OptionKey, string | null>
+  const present: boolean[] = []
   for (const key of OPTIONS) {
     const lower = key.toLowerCase()
     const text = clean(raw[`opcion_${lower}` as keyof RawRow])
     const image = clean(raw[`imagen_${lower}` as keyof RawRow]) || null
-    if (!text && !image) block(`Falta la opción ${key} (ni texto ni imagen).`, `opcion_${lower}` as keyof RawRow)
     options[key] = text
     optionImages[key] = image
+    present.push(Boolean(text || image))
   }
 
-  // Opciones idénticas: solo tiene sentido comparar las de texto.
-  const filledText = OPTIONS.filter((k) => options[k])
+  const lastPresent = present.lastIndexOf(true)
+  // Las opciones activas de esta pregunta: de A hasta la última presente.
+  const active = lastPresent >= 0 ? OPTIONS.slice(0, lastPresent + 1) : []
+  if (active.length < 2) {
+    block('La pregunta necesita al menos las opciones A y B.', 'opcion_a')
+  } else {
+    for (let i = 0; i <= lastPresent; i++) {
+      if (!present[i]) block(`Falta la opción ${OPTIONS[i]} (ni texto ni imagen).`, `opcion_${OPTIONS[i]!.toLowerCase()}` as keyof RawRow)
+    }
+  }
+
+  // Opciones idénticas: solo tiene sentido comparar las de texto entre las activas.
+  const filledText = active.filter((k) => options[k])
   const distinct = new Set(filledText.map((k) => fold(options[k])))
-  if (filledText.length === OPTIONS.length && distinct.size < OPTIONS.length) {
+  if (filledText.length >= 2 && distinct.size < filledText.length) {
     at('warning', 'Hay dos o más opciones de respuesta idénticas.', 'opcion_a')
   }
 
-  // --- Respuesta correcta ---
+  // --- Respuesta correcta: una de las opciones activas ---
   const correctRaw = clean(raw.respuesta_correcta).toUpperCase()
   const correctOption = OPTIONS.find((k) => k === correctRaw)
+  const lastLetter = active.length ? active[active.length - 1] : 'D'
   if (!correctRaw) block('Falta la respuesta correcta.', 'respuesta_correcta')
-  else if (!correctOption) block(`La respuesta correcta debe ser A, B, C o D. Se encontró "${correctRaw}".`, 'respuesta_correcta')
+  else if (!correctOption) block(`La respuesta correcta debe ser una letra de A a ${lastLetter}. Se encontró "${correctRaw}".`, 'respuesta_correcta')
+  else if (active.length >= 2 && !active.includes(correctOption)) {
+    block(`La respuesta correcta es "${correctRaw}", pero esa opción no existe en la pregunta (va de A a ${lastLetter}).`, 'respuesta_correcta')
+  }
 
   // --- Peso (opcional, por defecto 1) ---
   const pesoRaw = clean(raw.peso)

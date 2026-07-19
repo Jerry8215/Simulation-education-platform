@@ -110,7 +110,9 @@ export function ImportQuestions() {
                   <MathText text={q.stem} />
                 </p>
                 <ul className="mt-2 grid gap-1 text-sm sm:grid-cols-2">
-                  {(['A', 'B', 'C', 'D'] as const).map((k) => (
+                  {(['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'] as const)
+                    .filter((k) => q.options[k] || q.optionImages?.[k])
+                    .map((k) => (
                     <li
                       key={k}
                       className={

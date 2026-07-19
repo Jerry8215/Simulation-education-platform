@@ -63,12 +63,30 @@ describe('errores que bloquean la carga', () => {
     assert.equal(parse([row({ respuesta_correcta: '' })]).questions.length, 0)
   })
 
-  it('una respuesta correcta que no es A, B, C ni D', () => {
-    assert.match(errorsOf([row({ respuesta_correcta: 'E' })]).join(), /debe ser A, B, C o D/)
+  it('una respuesta correcta que no es una letra de opción', () => {
+    assert.match(errorsOf([row({ respuesta_correcta: 'Z' })]).join(), /debe ser una letra de A a D/)
   })
 
-  it('una opción vacía', () => {
+  it('la respuesta correcta apunta a una opción que no existe en la pregunta', () => {
+    // "E" es una letra válida, pero esta pregunta solo tiene A-D.
+    assert.match(errorsOf([row({ respuesta_correcta: 'E' })]).join(), /no existe en la pregunta/)
+  })
+
+  it('una opción vacía (hueco en el rango)', () => {
+    // C vacía con D presente: es un hueco, se marca.
     assert.match(errorsOf([row({ opcion_c: '' })]).join(), /Falta la opción C/)
+  })
+
+  it('acepta una pregunta de emparejamiento con 8 opciones (A-H)', () => {
+    const result = parse([
+      row({
+        opcion_e: 'armchair', opcion_f: 'bed', opcion_g: 'shower', opcion_h: 'towel',
+        respuesta_correcta: 'H',
+      }),
+    ])
+    assert.deepEqual(result.issues.filter((i) => i.severity === 'error'), [])
+    assert.equal(result.questions[0]!.correctOption, 'H')
+    assert.equal(result.questions[0]!.options.H, 'towel')
   })
 
   it('un área que no existe', () => {

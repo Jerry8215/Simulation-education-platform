@@ -44,6 +44,10 @@ function rebuild(q: ParsedQuestion): RawRow {
     opcion_b: q.options.B,
     opcion_c: q.options.C,
     opcion_d: q.options.D,
+    opcion_e: q.options.E,
+    opcion_f: q.options.F,
+    opcion_g: q.options.G,
+    opcion_h: q.options.H,
     respuesta_correcta: q.correctOption,
     peso: String(q.weight),
     parte: q.part,
@@ -51,6 +55,10 @@ function rebuild(q: ParsedQuestion): RawRow {
     imagen_b: q.optionImages.B ?? '',
     imagen_c: q.optionImages.C ?? '',
     imagen_d: q.optionImages.D ?? '',
+    imagen_e: q.optionImages.E ?? '',
+    imagen_f: q.optionImages.F ?? '',
+    imagen_g: q.optionImages.G ?? '',
+    imagen_h: q.optionImages.H ?? '',
     imagen: q.imageName ?? '',
     explicacion: q.explanation ?? '',
   }
@@ -123,6 +131,15 @@ describe('la carga confirmada no pierde ningún dato de la vista previa', () => 
     const segunda = parseQuestions([rebuild(primera)], COMPETENCIAS).questions[0]!
     assert.equal(segunda.optionImages.A, 'tabla_a.png', 'la imagen de la opción no se puede perder')
     assert.equal(segunda.optionImages.B, 'tabla_b.png')
+  })
+
+  it('una pregunta de 8 opciones (emparejamiento de inglés) sobrevive intacta', () => {
+    const ocho = { ...FILA, opcion_e: 'E5', opcion_f: 'F6', opcion_g: 'G7', opcion_h: 'H8', respuesta_correcta: 'G' }
+    const primera = parseQuestions([ocho], COMPETENCIAS).questions[0]!
+    const segunda = parseQuestions([rebuild(primera)], COMPETENCIAS).questions[0]!
+    assert.deepEqual(segunda, primera)
+    assert.equal(segunda.options.H, 'H8')
+    assert.equal(segunda.correctOption, 'G')
   })
 
   it('la parte de la segunda sesión sobrevive a la confirmación', () => {

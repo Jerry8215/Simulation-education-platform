@@ -172,9 +172,10 @@ export type AnswerRow = {
   areaLabel: string
   competency: string
   stem: string
-  options: Record<'A' | 'B' | 'C' | 'D', string>
-  selected: 'A' | 'B' | 'C' | 'D' | null
-  correct: 'A' | 'B' | 'C' | 'D'
+  /** Solo las opciones que existen (texto o imagen): 4 normales, hasta 8 en inglés. */
+  options: Array<{ key: 'A' | 'B' | 'C' | 'D' | 'E' | 'F' | 'G' | 'H'; text: string; imageUrl: string | null }>
+  selected: 'A' | 'B' | 'C' | 'D' | 'E' | 'F' | 'G' | 'H' | null
+  correct: 'A' | 'B' | 'C' | 'D' | 'E' | 'F' | 'G' | 'H'
   isCorrect: boolean
   /** Segundos que tardó en esta pregunta. */
   seconds: number
@@ -237,7 +238,18 @@ export async function getAttemptDetail(attemptId: string): Promise<AttemptDetail
         areaLabel: AREA_LABELS[v.question.area as Area],
         competency: v.question.competency.name,
         stem: v.stem,
-        options: { A: v.optionA, B: v.optionB, C: v.optionC, D: v.optionD },
+        options: (
+          [
+            { key: 'A', text: v.optionA, imageUrl: v.optionAImageUrl },
+            { key: 'B', text: v.optionB, imageUrl: v.optionBImageUrl },
+            { key: 'C', text: v.optionC, imageUrl: v.optionCImageUrl },
+            { key: 'D', text: v.optionD, imageUrl: v.optionDImageUrl },
+            { key: 'E', text: v.optionE ?? '', imageUrl: v.optionEImageUrl },
+            { key: 'F', text: v.optionF ?? '', imageUrl: v.optionFImageUrl },
+            { key: 'G', text: v.optionG ?? '', imageUrl: v.optionGImageUrl },
+            { key: 'H', text: v.optionH ?? '', imageUrl: v.optionHImageUrl },
+          ] as const
+        ).filter((o) => o.text || o.imageUrl),
         selected: a.selected,
         correct: v.correctOption,
         isCorrect: a.isCorrect,

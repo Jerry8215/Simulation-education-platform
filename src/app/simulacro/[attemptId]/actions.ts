@@ -10,7 +10,7 @@ type ActionResult = { ok: true } | { ok: false; error: string }
 export async function saveAnswerAction(
   attemptId: string,
   order: number,
-  selected: 'A' | 'B' | 'C' | 'D' | null,
+  selected: 'A' | 'B' | 'C' | 'D' | 'E' | 'F' | 'G' | 'H' | null,
   timeSpentMs: number,
 ): Promise<ActionResult> {
   const { userId } = await requireUser()

@@ -120,8 +120,8 @@ export type GradableAnswer = {
   area: Area
   weight: number
   /** null = en blanco. Cuenta como incorrecta y no resta puntos (§1). */
-  selected: 'A' | 'B' | 'C' | 'D' | null
-  correctOption: 'A' | 'B' | 'C' | 'D'
+  selected: 'A' | 'B' | 'C' | 'D' | 'E' | 'F' | 'G' | 'H' | null
+  correctOption: 'A' | 'B' | 'C' | 'D' | 'E' | 'F' | 'G' | 'H'
 }
 
 export type GradedAttempt = {

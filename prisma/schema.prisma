@@ -47,6 +47,12 @@ enum Option {
   B
   C
   D
+  // Hasta 8 opciones para el formato de emparejamiento del ICFES de inglés
+  // (varias descripciones que comparten una lista de palabras A-H).
+  E
+  F
+  G
+  H
 }
 
 model User {
@@ -187,12 +193,22 @@ model QuestionVersion {
   optionB       String
   optionC       String
   optionD       String
+  /// Opciones extra E-H (nulas si la pregunta tiene 4 o menos). Para el formato
+  /// de emparejamiento del ICFES de inglés, que llega hasta 8 opciones.
+  optionE       String?
+  optionF       String?
+  optionG       String?
+  optionH       String?
   /// Cuando una opción es una imagen (tabla, gráfica) en vez de texto. Van
   /// aparte del texto: una opción puede ser solo imagen, solo texto o ambos.
   optionAImageUrl String?
   optionBImageUrl String?
   optionCImageUrl String?
   optionDImageUrl String?
+  optionEImageUrl String?
+  optionFImageUrl String?
+  optionGImageUrl String?
+  optionHImageUrl String?
   correctOption Option
   explanation   String?
   imageUrl      String?

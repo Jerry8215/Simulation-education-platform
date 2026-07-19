@@ -125,13 +125,13 @@ function AnswerCard({ answer }: { answer: AnswerRow }) {
       </p>
 
       <ul className="mt-2 flex flex-col gap-1 text-sm">
-        {(['A', 'B', 'C', 'D'] as const).map((key) => {
-          const esCorrecta = key === answer.correct
-          const laEligio = key === answer.selected
+        {answer.options.map((option) => {
+          const esCorrecta = option.key === answer.correct
+          const laEligio = option.key === answer.selected
 
           return (
             <li
-              key={key}
+              key={option.key}
               className={[
                 'rounded-lg px-3 py-1.5',
                 esCorrecta ? 'bg-success/10 font-semibold text-success' : '',
@@ -140,7 +140,16 @@ function AnswerCard({ answer }: { answer: AnswerRow }) {
               ].join(' ')}
             >
               {esCorrecta ? '✔ ' : laEligio ? '✗ ' : ''}
-              {key}. <MathText text={answer.options[key]} />
+              {option.key}. {option.text && <MathText text={option.text} />}
+              {option.imageUrl && (
+                <Image
+                  src={option.imageUrl}
+                  alt={`Opción ${option.key}`}
+                  width={500}
+                  height={375}
+                  className="mt-1 max-h-44 w-auto max-w-full rounded ring-1 ring-brand-200"
+                />
+              )}
               {laEligio && (
                 <span className="ml-2 text-xs font-normal opacity-80">(su respuesta)</span>
               )}

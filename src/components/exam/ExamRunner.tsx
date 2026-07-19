@@ -21,7 +21,7 @@ import {
   type QuestionState,
 } from '@/lib/exam-ui'
 
-type OptionKey = 'A' | 'B' | 'C' | 'D'
+type OptionKey = 'A' | 'B' | 'C' | 'D' | 'E' | 'F' | 'G' | 'H'
 
 const URGENCY_CLASS: Record<ReturnType<typeof countdownUrgency>, string> = {
   calm: 'bg-card text-navy-900',

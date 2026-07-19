@@ -31,10 +31,36 @@ export class AttemptError extends Error {}
 // ---------------------------------------------------------------------------
 
 export type ExamOption = {
-  key: 'A' | 'B' | 'C' | 'D'
+  key: 'A' | 'B' | 'C' | 'D' | 'E' | 'F' | 'G' | 'H'
   text: string
   /** Si la opción es una imagen (tabla/gráfica) en vez de —o además de— texto. */
   imageUrl: string | null
+}
+
+/**
+ * Arma la lista de opciones de una versión, dejando solo las que existen (texto
+ * o imagen). Una pregunta normal devuelve 4 (A-D); una de emparejamiento del
+ * ICFES de inglés, hasta 8 (A-H). Las opciones vacías E-H no se muestran.
+ */
+function buildExamOptions(v: {
+  optionA: string; optionB: string; optionC: string; optionD: string
+  optionE: string | null; optionF: string | null; optionG: string | null; optionH: string | null
+  optionAImageUrl: string | null; optionBImageUrl: string | null
+  optionCImageUrl: string | null; optionDImageUrl: string | null
+  optionEImageUrl: string | null; optionFImageUrl: string | null
+  optionGImageUrl: string | null; optionHImageUrl: string | null
+}): ExamOption[] {
+  const all: ExamOption[] = [
+    { key: 'A', text: v.optionA, imageUrl: v.optionAImageUrl },
+    { key: 'B', text: v.optionB, imageUrl: v.optionBImageUrl },
+    { key: 'C', text: v.optionC, imageUrl: v.optionCImageUrl },
+    { key: 'D', text: v.optionD, imageUrl: v.optionDImageUrl },
+    { key: 'E', text: v.optionE ?? '', imageUrl: v.optionEImageUrl },
+    { key: 'F', text: v.optionF ?? '', imageUrl: v.optionFImageUrl },
+    { key: 'G', text: v.optionG ?? '', imageUrl: v.optionGImageUrl },
+    { key: 'H', text: v.optionH ?? '', imageUrl: v.optionHImageUrl },
+  ]
+  return all.filter((o) => o.text || o.imageUrl)
 }
 
 export type ExamQuestion = {
@@ -48,7 +74,7 @@ export type ExamQuestion = {
   imageUrl: string | null
   options: ExamOption[]
   /** La opción que el estudiante ya marcó, si retomó el intento. Nunca la correcta. */
-  selected: 'A' | 'B' | 'C' | 'D' | null
+  selected: 'A' | 'B' | 'C' | 'D' | 'E' | 'F' | 'G' | 'H' | null
 }
 
 export type ExamView = {
@@ -188,12 +214,7 @@ export async function getExamView(userId: string, attemptId: string): Promise<Ex
         stem: version.stem,
         imageUrl: version.imageUrl,
         // Solo el texto/imagen de cada opción. `correctOption` se queda en el servidor.
-        options: [
-          { key: 'A', text: version.optionA, imageUrl: version.optionAImageUrl },
-          { key: 'B', text: version.optionB, imageUrl: version.optionBImageUrl },
-          { key: 'C', text: version.optionC, imageUrl: version.optionCImageUrl },
-          { key: 'D', text: version.optionD, imageUrl: version.optionDImageUrl },
-        ],
+        options: buildExamOptions(version),
         selected: selectedByVersion.get(version.id) ?? null,
       }
     })
@@ -262,7 +283,7 @@ export async function saveAnswer(
   userId: string,
   attemptId: string,
   order: number,
-  selected: 'A' | 'B' | 'C' | 'D' | null,
+  selected: 'A' | 'B' | 'C' | 'D' | 'E' | 'F' | 'G' | 'H' | null,
   timeSpentMs = 0,
 ): Promise<void> {
   const attempt = await db.attempt.findUnique({
@@ -549,8 +570,8 @@ export type ReviewQuestion = {
   areaLabel: string
   stem: string
   options: ExamOption[]
-  selected: 'A' | 'B' | 'C' | 'D' | null
-  correct: 'A' | 'B' | 'C' | 'D'
+  selected: 'A' | 'B' | 'C' | 'D' | 'E' | 'F' | 'G' | 'H' | null
+  correct: 'A' | 'B' | 'C' | 'D' | 'E' | 'F' | 'G' | 'H'
   isCorrect: boolean
   explanation: string | null
 }
@@ -591,12 +612,7 @@ export async function getAttemptReview(userId: string, attemptId: string): Promi
       order: answer.order,
       areaLabel: AREA_LABELS[version.question.area as Area],
       stem: version.stem,
-      options: [
-        { key: 'A', text: version.optionA, imageUrl: version.optionAImageUrl },
-        { key: 'B', text: version.optionB, imageUrl: version.optionBImageUrl },
-        { key: 'C', text: version.optionC, imageUrl: version.optionCImageUrl },
-        { key: 'D', text: version.optionD, imageUrl: version.optionDImageUrl },
-      ],
+      options: buildExamOptions(version),
       selected: answer.selected,
       correct: version.correctOption,
       isCorrect: answer.isCorrect,

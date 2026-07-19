@@ -130,13 +130,21 @@ export async function persistQuestions(questions: ParsedQuestion[]): Promise<Per
     optionB: string
     optionC: string
     optionD: string
-    correctOption: 'A' | 'B' | 'C' | 'D'
+    optionE: string | null
+    optionF: string | null
+    optionG: string | null
+    optionH: string | null
+    correctOption: 'A' | 'B' | 'C' | 'D' | 'E' | 'F' | 'G' | 'H'
     explanation: string | null
     imageUrl: string | null
     optionAImageUrl: string | null
     optionBImageUrl: string | null
     optionCImageUrl: string | null
     optionDImageUrl: string | null
+    optionEImageUrl: string | null
+    optionFImageUrl: string | null
+    optionGImageUrl: string | null
+    optionHImageUrl: string | null
   }> = []
   const linkRows: Array<{
     assessmentId: string
@@ -171,6 +179,10 @@ export async function persistQuestions(questions: ParsedQuestion[]): Promise<Per
       optionB: q.options.B,
       optionC: q.options.C,
       optionD: q.options.D,
+      optionE: q.options.E || null,
+      optionF: q.options.F || null,
+      optionG: q.options.G || null,
+      optionH: q.options.H || null,
       correctOption: q.correctOption,
       explanation: q.explanation,
       imageUrl: resolveImageUrl(q.imageName),
@@ -178,6 +190,10 @@ export async function persistQuestions(questions: ParsedQuestion[]): Promise<Per
       optionBImageUrl: resolveImageUrl(q.optionImages.B),
       optionCImageUrl: resolveImageUrl(q.optionImages.C),
       optionDImageUrl: resolveImageUrl(q.optionImages.D),
+      optionEImageUrl: resolveImageUrl(q.optionImages.E),
+      optionFImageUrl: resolveImageUrl(q.optionImages.F),
+      optionGImageUrl: resolveImageUrl(q.optionImages.G),
+      optionHImageUrl: resolveImageUrl(q.optionImages.H),
     })
 
     const title = q.simulacro ?? q.taller
