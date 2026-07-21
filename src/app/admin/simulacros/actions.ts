@@ -99,6 +99,43 @@ export async function setDurationPart2Action(formData: FormData): Promise<void> 
 }
 
 /**
+ * Elimina un simulacro o taller completo.
+ *
+ * Qué se borra y qué NO:
+ *  - Se borran sus PRESENTACIONES (intentos), y con ellas, por cascada, las
+ *    respuestas y los puntajes de los estudiantes en ESTE simulacro.
+ *  - Se borran los enlaces pregunta↔simulacro y el acceso por grupos (cascada).
+ *  - Las PREGUNTAS en sí NO se borran: quedan en el banco y pueden reusarse.
+ *
+ * `Attempt` no tiene borrado en cascada desde `Assessment` (a propósito: obliga
+ * a ser explícito con datos de estudiantes), así que primero se borran los
+ * intentos y luego el simulacro. Todo en una transacción.
+ */
+export async function deleteAssessmentAction(formData: FormData): Promise<void> {
+  await requireAdmin()
+
+  const assessmentId = String(formData.get('assessmentId') ?? '')
+  if (!assessmentId) return
+
+  const assessment = await db.assessment.findUnique({
+    where: { id: assessmentId },
+    select: { id: true },
+  })
+  if (!assessment) return
+
+  await db.$transaction([
+    // Los intentos primero (respuestas y puntajes caen por cascada).
+    db.attempt.deleteMany({ where: { assessmentId } }),
+    // El simulacro después (enlaces de preguntas y grupos caen por cascada).
+    db.assessment.delete({ where: { id: assessmentId } }),
+  ])
+
+  revalidatePath('/admin/simulacros')
+  revalidatePath('/simulacros')
+  revalidatePath('/talleres')
+}
+
+/**
  * Pone (o quita) la imagen de portada de un taller o simulacro. Es lo primero
  * que ve el estudiante al abrirlo, como la cabecera de un formulario de Google.
  */

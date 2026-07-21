@@ -8,6 +8,7 @@ import {
   togglePublishAction,
 } from '@/app/admin/simulacros/actions'
 import { setAssessmentGroupsAction } from '@/app/admin/grupos/actions'
+import { DeleteAssessmentButton } from '@/components/admin/DeleteAssessmentButton'
 import { requireAdmin } from '@/lib/auth/require'
 import { db } from '@/lib/db'
 import { AREA_LABELS, type Area } from '@/lib/scoring'
@@ -255,6 +256,19 @@ export default async function AdminSimulacrosPage() {
                     Sube una imagen primero →
                   </Link>
                 )}
+              </div>
+
+              {/* Eliminar: zona de peligro, al final y separada de lo demás */}
+              <div className="mt-4 flex items-center justify-between border-t border-danger/20 pt-3">
+                <span className="text-xs text-muted-600">
+                  Eliminar borra este simulacro y sus {a._count.attempts} presentación(es). Las
+                  preguntas quedan en el banco.
+                </span>
+                <DeleteAssessmentButton
+                  title={a.title}
+                  assessmentId={a.id}
+                  attempts={a._count.attempts}
+                />
               </div>
             </li>
           ))}
