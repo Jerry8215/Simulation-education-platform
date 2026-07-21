@@ -132,7 +132,35 @@ export async function startOrResumeAttempt(userId: string, assessmentId: string)
 
   if (existing) {
     if (existing.status === 'IN_PROGRESS') return existing.id
-    // §9: no se repite un simulacro terminado, por ahora.
+
+    // El intento ya cerró, PERO el simulacro pudo crecer: si tiene una sesión
+    // más allá de la que este estudiante alcanzó, se REABRE en la siguiente
+    // sesión, conservando las respuestas de la anterior. Pasa siempre que la
+    // Sesión 2 se sube DESPUÉS de que el estudiante ya hizo la Sesión 1: sin
+    // esto, el sistema le diría "ya completado" y no podría hacer la parte 2.
+    const parts = await db.assessmentQuestion.findMany({
+      where: { assessmentId },
+      select: { part: true },
+    })
+    const totalParts = parts.reduce((max, q) => Math.max(max, q.part), 1)
+    if (existing.currentPart < totalParts) {
+      const minutes =
+        assessment.durationMinutesPart2 ?? assessment.durationMinutes ?? 60
+      await db.attempt.update({
+        where: { id: existing.id },
+        data: {
+          status: 'IN_PROGRESS',
+          currentPart: existing.currentPart + 1,
+          expiresAt:
+            assessment.type === 'SIMULACRO'
+              ? new Date(Date.now() + minutes * 60_000)
+              : null,
+        },
+      })
+      return existing.id
+    }
+
+    // §9: ya hizo todas las sesiones; no se repite un simulacro terminado.
     throw new AttemptError('Ya presentaste este simulacro. No se puede repetir.')
   }
 
