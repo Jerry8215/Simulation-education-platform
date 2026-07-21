@@ -6,6 +6,7 @@ import { useCallback, useEffect, useRef, useState, useTransition } from 'react'
 
 import {
   advancePartAction,
+  keepAliveAction,
   pauseAttemptAction,
   saveAnswerAction,
   submitAttemptAction,
@@ -18,6 +19,7 @@ import {
   clampIndex,
   countdownUrgency,
   formatCountdown,
+  HEARTBEAT_MS,
   navProgress,
   type QuestionState,
 } from '@/lib/exam-ui'
@@ -39,6 +41,9 @@ export function ExamRunner({ view }: { view: ExamView }) {
   const [remaining, setRemaining] = useState<number | null>(view.secondsRemaining)
   const [confirmOpen, setConfirmOpen] = useState(false)
   const [exitOpen, setExitOpen] = useState(false)
+  // Se acabó el tiempo de una sesión intermedia: el paso a la siguiente lo
+  // confirma el estudiante, no se hace solo.
+  const [timeUpOpen, setTimeUpOpen] = useState(false)
   const [submitting, startSubmit] = useTransition()
   const [error, setError] = useState<string | null>(null)
 
@@ -76,21 +81,44 @@ export function ExamRunner({ view }: { view: ExamView }) {
     })
   }, [router, view.attemptId])
 
-  // Al agotarse el tiempo: si quedan partes, se pasa a la siguiente; si es la
-  // última, se envía. En ambos casos el servidor manda: esto solo lo dispara.
+  // Al agotarse el tiempo: si quedan sesiones, se AVISA y el estudiante decide
+  // cuándo pasar a la siguiente; si es la última, se envía y se califica.
   const finish = hasNextPart ? advance : submit
 
   // Cronómetro visual. El de verdad está en el servidor: esto solo cuenta hacia
-  // abajo, y al llegar a cero dispara el cierre de la parte, que el servidor confirma.
+  // abajo, y al llegar a cero cierra la sesión (o pide confirmación para pasar
+  // a la siguiente), que el servidor confirma.
   useEffect(() => {
     if (remaining === null) return
     if (remaining <= 0) {
-      finish()
+      if (hasNextPart) setTimeUpOpen(true)
+      else submit()
       return
     }
     const id = setTimeout(() => setRemaining((r) => (r === null ? null : r - 1)), 1000)
     return () => clearTimeout(id)
-  }, [remaining, finish])
+  }, [remaining, hasNextPart, submit])
+
+  // Latido: mientras el examen esté a la vista, le dice al servidor que el
+  // estudiante sigue aquí y trae los segundos que quedan de verdad. El tiempo
+  // con la pestaña cerrada o en segundo plano no consume el reloj, así que
+  // cerrar el examen y volver mañana ya no quema la sesión.
+  useEffect(() => {
+    if (view.secondsRemaining === null) return
+    let cancelled = false
+    async function beat() {
+      if (document.visibilityState !== 'visible') return
+      const seconds = await keepAliveAction(view.attemptId)
+      if (!cancelled && seconds !== null) setRemaining(seconds)
+    }
+    const id = setInterval(beat, HEARTBEAT_MS)
+    document.addEventListener('visibilitychange', beat)
+    return () => {
+      cancelled = true
+      clearInterval(id)
+      document.removeEventListener('visibilitychange', beat)
+    }
+  }, [view.attemptId, view.secondsRemaining])
 
   async function choose(order: number, key: OptionKey) {
     setAnswers((prev) => ({ ...prev, [order]: key }))
@@ -332,6 +360,13 @@ export function ExamRunner({ view }: { view: ExamView }) {
         onConfirm={finish}
       />
 
+      <TimeUpPart
+        open={timeUpOpen}
+        currentPart={view.currentPart}
+        submitting={submitting}
+        onConfirm={advance}
+      />
+
       <ConfirmExit
         open={exitOpen}
         timed={view.secondsRemaining !== null}
@@ -442,6 +477,58 @@ function ConfirmExit({
             className="flex-1 rounded-lg bg-navy-900 px-4 py-2 font-semibold text-white"
           >
             {timed ? 'Pausar y salir' : 'Salir'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/**
+ * Se acabó el tiempo de una sesión intermedia.
+ *
+ * El paso a la sesión siguiente NO se hace solo: antes el sistema saltaba en
+ * silencio, y un estudiante que había cerrado el examen se encontraba en la
+ * sesión 2 sin haber presentado la 1. Aquí se le dice qué pasó y él decide
+ * cuándo empezar la siguiente; también puede salir y volver después.
+ */
+function TimeUpPart({
+  open,
+  currentPart,
+  submitting,
+  onConfirm,
+}: {
+  open: boolean
+  currentPart: number
+  submitting: boolean
+  onConfirm: () => void
+}) {
+  if (!open) return null
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-navy-950/50 p-4">
+      <div className="w-full max-w-sm rounded-card bg-card p-6 text-center shadow-xl">
+        <h3 className="text-lg font-semibold text-navy-900">
+          Se acabó el tiempo de la sesión {currentPart}
+        </h3>
+        <p className="mt-2 text-sm text-muted-600">
+          Lo que respondiste quedó guardado. Cuando estés listo puedes empezar la sesión{' '}
+          {currentPart + 1}, que tiene su propio tiempo. Si prefieres descansar, sal y vuelve
+          después: la sesión {currentPart + 1} te espera.
+        </p>
+        <div className="mt-5 flex gap-3">
+          <a
+            href="/simulacros"
+            className="flex-1 rounded-lg border border-brand-200 px-4 py-2 font-medium text-navy-900"
+          >
+            Salir
+          </a>
+          <button
+            type="button"
+            onClick={onConfirm}
+            disabled={submitting}
+            className="flex-1 rounded-lg bg-brand-600 px-4 py-2 font-semibold text-white disabled:opacity-60"
+          >
+            {submitting ? 'Abriendo…' : `Empezar sesión ${currentPart + 1} →`}
           </button>
         </div>
       </div>

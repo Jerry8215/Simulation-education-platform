@@ -6,6 +6,13 @@
  * se muestra la cuenta regresiva y qué preguntas quedan sin responder.
  */
 
+/**
+ * Cada cuánto el examen abierto avisa al servidor que el estudiante sigue ahí.
+ * El servidor solo le cobra el tiempo en el que hubo latido: lo que pasa fuera
+ * del examen (pestaña cerrada, portátil apagado) no consume el reloj.
+ */
+export const HEARTBEAT_MS = 30_000
+
 export type QuestionState = {
   order: number
   answered: boolean

@@ -294,6 +294,12 @@ model Attempt {
   /// examen, el cronómetro se reanuda desde este valor. Nulo mientras corre.
   remainingMs Int?
 
+  /// Última señal de vida del estudiante DENTRO del examen (la manda la página
+  /// abierta cada medio minuto). El reloj solo debe consumir el tiempo que el
+  /// estudiante estuvo presente: al volver, las horas de ausencia se le devuelven
+  /// a `expiresAt`. Sin esto, cerrar la pestaña por la noche quemaba la sesión.
+  lastSeenAt DateTime?
+
   /// Se llenan al calificar. Nulos mientras el intento está en curso.
   globalScore  Int? // 0..500, fórmula oficial ICFES (§2). Solo simulacros.
   percent      Int? // 0..100, porcentaje de aciertos del intento completo (§3).

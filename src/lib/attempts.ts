@@ -1,6 +1,7 @@
 import 'server-only'
 
 import { db } from '@/lib/db'
+import { HEARTBEAT_MS } from '@/lib/exam-ui'
 import {
   AREA_LABELS,
   gradeAttempt,
@@ -25,6 +26,33 @@ import {
  */
 
 export class AttemptError extends Error {}
+
+/**
+ * A partir de cuánto silencio se considera que el estudiante YA NO ESTÁ en el
+ * examen. Dos latidos perdidos: ni un tirón de la red ni una pestaña en segundo
+ * plano bastan para dar a alguien por ausente.
+ */
+const AWAY_THRESHOLD_MS = HEARTBEAT_MS * 3
+
+/**
+ * El `expiresAt` puesto al día: el reloj solo consume el tiempo que el
+ * estudiante estuvo PRESENTE, así que las horas de ausencia se le devuelven.
+ *
+ * Si cerró la pestaña y volvió al día siguiente, esas horas no cuentan. Antes no
+ * era así, y quien cerraba el examen y volvía después perdía la sesión entera
+ * sin haberla presentado.
+ *
+ * La ausencia solo se devuelve si el tiempo NO se había agotado ya con el
+ * estudiante delante (`expiresAt` posterior al último latido). Una sesión que se
+ * venció mientras la presentaba está vencida y volver a entrar no la revive.
+ */
+function resumedExpiry(expiresAt: Date, lastSeenAt: Date | null): Date {
+  if (!lastSeenAt) return expiresAt
+  const away = Date.now() - lastSeenAt.getTime()
+  if (away <= AWAY_THRESHOLD_MS) return expiresAt
+  if (expiresAt.getTime() <= lastSeenAt.getTime()) return expiresAt
+  return new Date(expiresAt.getTime() + away)
+}
 
 // ---------------------------------------------------------------------------
 // Lo que ve el estudiante mientras presenta (sin la respuesta correcta)
@@ -210,31 +238,36 @@ export async function getExamView(userId: string, attemptId: string): Promise<Ex
     throw new AttemptError('Este intento ya fue enviado.')
   }
 
-  // Estaba pausado (salió con "Pausar y salir"): al volver a abrir el examen, el
-  // reloj se reanuda desde el tiempo que quedaba. Solo aplica a los cronometrados
-  // (los talleres no tienen reloj y `remainingMs` es nulo).
+  // El reloj se pone al día con lo que pasó mientras el examen estaba cerrado.
+  // Son dos caminos y se excluyen: o salió con "Pausar y salir" (hay
+  // `remainingMs` y el reloj estaba detenido), o simplemente se fue (el reloj
+  // siguió corriendo y hay que devolverle el tiempo ausente). En ambos, al
+  // volver conserva el tiempo que le quedaba.
   if (attempt.expiresAt === null && attempt.remainingMs != null) {
-    const resumed = new Date(Date.now() + attempt.remainingMs)
-    await db.attempt.update({
-      where: { id: attemptId },
-      data: { expiresAt: resumed, remainingMs: null },
-    })
-    attempt.expiresAt = resumed
+    attempt.expiresAt = new Date(Date.now() + attempt.remainingMs)
     attempt.remainingMs = null
+  } else if (attempt.expiresAt) {
+    attempt.expiresAt = resumedExpiry(attempt.expiresAt, attempt.lastSeenAt)
   }
+
+  // Queda marcado como presente: desde aquí el reloj vuelve a correr.
+  await db.attempt.update({
+    where: { id: attemptId },
+    data: { expiresAt: attempt.expiresAt, remainingMs: null, lastSeenAt: new Date() },
+  })
 
   const totalParts = attempt.assessment.questions.reduce((max, aq) => Math.max(max, aq.part), 1)
 
-  // Si el reloj del servidor dice que el tiempo de la parte en curso ya pasó:
-  // en un simulacro de dos partes, la parte 1 vencida avanza a la parte 2; la
-  // última parte vencida se envía y se cierra.
+  // Si el reloj del servidor dice que el tiempo de la parte en curso ya pasó y
+  // era la ÚLTIMA, se envía y se califica. Si quedan sesiones por delante NO se
+  // salta solo: se devuelve la sesión en curso con el reloj en cero y es el
+  // estudiante quien confirma el paso a la siguiente. Saltar en silencio le
+  // borraba una sesión que creía tener pendiente.
   if (attempt.expiresAt && attempt.expiresAt.getTime() <= Date.now()) {
-    if (attempt.currentPart < totalParts) {
-      await advanceToNextPart(userId, attemptId)
-      return getExamView(userId, attemptId)
+    if (attempt.currentPart >= totalParts) {
+      await submitAttempt(userId, attemptId, { expired: true })
+      throw new AttemptError('Se acabó el tiempo de este simulacro.')
     }
-    await submitAttempt(userId, attemptId, { expired: true })
-    throw new AttemptError('Se acabó el tiempo de este simulacro.')
   }
 
   const selectedByVersion = new Map(attempt.answers.map((a) => [a.questionVersionId, a.selected]))
@@ -314,6 +347,37 @@ export async function advanceToNextPart(userId: string, attemptId: string): Prom
       expiresAt: new Date(Date.now() + minutes * 60_000),
     },
   })
+}
+
+/**
+ * Señal de vida del examen abierto, cada `HEARTBEAT_MS`.
+ *
+ * Sirve para dos cosas: marcar al estudiante como presente (el reloj solo
+ * consume el tiempo que está delante del examen) y devolverle al navegador los
+ * segundos que faltan según el servidor, que es el que manda.
+ *
+ * Si el estudiante estuvo ausente entre dos latidos —cerró el portátil, se le
+ * cayó la red, el móvil mató la pestaña— ese tiempo NO se le cobra.
+ *
+ * Nunca falla: un latido perdido no puede tumbar el examen.
+ */
+export async function keepAliveAttempt(userId: string, attemptId: string): Promise<number | null> {
+  const attempt = await db.attempt.findUnique({
+    where: { id: attemptId },
+    select: { userId: true, status: true, expiresAt: true, lastSeenAt: true },
+  })
+  if (!attempt || attempt.userId !== userId) return null
+  if (attempt.status !== 'IN_PROGRESS') return null
+  if (!attempt.expiresAt) return null // taller sin reloj, o pausado
+
+  const expiresAt = resumedExpiry(attempt.expiresAt, attempt.lastSeenAt)
+
+  await db.attempt.update({
+    where: { id: attemptId },
+    data: { expiresAt, lastSeenAt: new Date() },
+  })
+
+  return Math.max(0, Math.floor((expiresAt.getTime() - Date.now()) / 1000))
 }
 
 /**

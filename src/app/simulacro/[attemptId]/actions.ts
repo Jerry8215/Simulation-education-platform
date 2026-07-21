@@ -6,12 +6,23 @@ import { requireUser } from '@/lib/auth/require'
 import {
   advanceToNextPart,
   AttemptError,
+  keepAliveAttempt,
   pauseAttempt,
   saveAnswer,
   submitAttempt,
 } from '@/lib/attempts'
 
 type ActionResult = { ok: true } | { ok: false; error: string }
+
+/**
+ * Latido del examen abierto: dice que el estudiante sigue ahí y devuelve los
+ * segundos que quedan según el reloj del servidor. El tiempo que pasa fuera del
+ * examen no se le cobra. Devuelve null si no hay reloj que sincronizar.
+ */
+export async function keepAliveAction(attemptId: string): Promise<number | null> {
+  const { userId } = await requireUser()
+  return keepAliveAttempt(userId, attemptId)
+}
 
 /**
  * Pausa el cronómetro al salir sin terminar. Las respuestas ya quedaron
